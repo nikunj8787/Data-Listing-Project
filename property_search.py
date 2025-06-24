@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from database_manager import get_properties, log_contact_view, save_property, get_saved_properties
-from deepseek_integration import search_with_ai
 
 def show_property_search():
     """Enhanced property search interface with professional styling"""
@@ -49,30 +48,14 @@ def show_ai_search():
         search_button = st.button("🔍 **Search**", type="primary", use_container_width=True)
     
     if search_button and ai_query:
-        with st.spinner("🔍 AI is analyzing your request..."):
-            results = search_with_ai(ai_query)
+        with st.spinner("🔍 Searching properties..."):
+            # Basic search for now
+            results = basic_search(ai_query)
             if not results.empty:
                 st.success(f"🎯 Found {len(results)} properties matching your description!")
-                display_property_results(results, f"AI Search Results for: '{ai_query}'")
+                display_property_results(results, f"Search Results for: '{ai_query}'")
             else:
                 st.info("🔍 No properties found matching your criteria. Try adjusting your description.")
-    
-    # Example queries section
-    st.markdown("### 💡 **Try These Example Searches:**")
-    
-    examples = [
-        ("2 BHK furnished apartment under 30,000 rent", "🏠"),
-        ("Commercial office space with parking in Ahmedabad", "🏢"),
-        ("3 BHK house for sale under 50 lakhs", "🏡"),
-        ("Shop for rent on main road with good footfall", "🏪")
-    ]
-    
-    cols = st.columns(2)
-    for i, (example, icon) in enumerate(examples):
-        with cols[i % 2]:
-            if st.button(f"{icon} {example}", key=f"example_{i}", use_container_width=True):
-                st.session_state.ai_search_input = example
-                st.rerun()
 
 def show_filter_search():
     """Advanced filter-based property search"""
@@ -142,11 +125,6 @@ def show_filter_search():
                 step=100,
                 help="Select the area range you prefer"
             )
-            
-            # Additional filters
-            st.markdown("**Additional Requirements:**")
-            parking_required = st.checkbox("🚗 Parking Required")
-            lift_required = st.checkbox("🛗 Lift Available")
     
     # Apply filters button
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -161,9 +139,7 @@ def show_filter_search():
                 'furnished_status': furnished_status if furnished_status != "Any" else None,
                 'property_age': property_age if property_age != "Any" else None,
                 'min_area': area_range[0],
-                'max_area': area_range[1],
-                'parking_required': parking_required,
-                'lift_required': lift_required
+                'max_area': area_range[1]
             }
             
             results = get_properties(filters, st.session_state.user_email)
@@ -191,6 +167,32 @@ def show_saved_properties():
         for i, (_, property_data) in enumerate(saved_properties.iterrows()):
             display_property_card(property_data, f"saved_{i}", show_save_button=False)
 
+def basic_search(query):
+    """Basic text search through properties"""
+    try:
+        all_properties = get_properties(customer_email=st.session_state.user_email)
+        
+        if all_properties.empty:
+            return all_properties
+        
+        query_lower = query.lower()
+        
+        # Search in multiple fields
+        mask = (
+            all_properties['location'].str.lower().str.contains(query_lower, na=False) |
+            all_properties['address'].str.lower().str.contains(query_lower, na=False) |
+            all_properties['property_type'].str.lower().str.contains(query_lower, na=False) |
+            all_properties['bhk_type'].str.lower().str.contains(query_lower, na=False) |
+            all_properties['furnished_status'].str.lower().str.contains(query_lower, na=False) |
+            all_properties['amenities'].str.lower().str.contains(query_lower, na=False)
+        )
+        
+        return all_properties[mask]
+        
+    except Exception as e:
+        st.error(f"Search failed: {str(e)}")
+        return pd.DataFrame()
+
 def display_property_results(results, title="Search Results"):
     """Display property search results with enhanced styling"""
     
@@ -206,49 +208,9 @@ def display_property_results(results, title="Search Results"):
     </div>
     """, unsafe_allow_html=True)
     
-    # Display options
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        view_type = st.radio(
-            "Display as:", 
-            ["🎴 Property Cards", "📋 Data Table"], 
-            horizontal=True,
-            help="Choose how you want to view the results"
-        )
-    
-    with col2:
-        sort_option = st.selectbox(
-            "Sort by:",
-            ["Price: Low to High", "Price: High to Low", "Newest First", "Area: Large to Small"]
-        )
-    
-    # Sort results
-    results_sorted = sort_properties(results, sort_option)
-    
-    if view_type == "🎴 Property Cards":
-        display_card_view(results_sorted)
-    else:
-        display_table_view(results_sorted)
-
-def sort_properties(df, sort_option):
-    """Sort properties based on user selection"""
-    if sort_option == "Price: Low to High":
-        return df.sort_values('price', ascending=True)
-    elif sort_option == "Price: High to Low":
-        return df.sort_values('price', ascending=False)
-    elif sort_option == "Newest First":
-        return df.sort_values('created_at', ascending=False)
-    elif sort_option == "Area: Large to Small":
-        return df.sort_values('area', ascending=False)
-    return df
-
-def display_card_view(results):
-    """Display properties in enhanced card format"""
-    cols = st.columns(2)
-    
+    # Display properties in card format
     for i, (_, property_data) in enumerate(results.iterrows()):
-        with cols[i % 2]:
-            display_property_card(property_data, f"card_{i}")
+        display_property_card(property_data, f"result_{i}")
 
 def display_property_card(property_data, key_suffix, show_save_button=True):
     """Display individual property card with professional styling"""
@@ -264,7 +226,9 @@ def display_property_card(property_data, key_suffix, show_save_button=True):
     type_color = type_colors.get(property_data['property_type'], "#7f8c8d")
     
     st.markdown(f"""
-    <div class="property-card" style="border-left: 5px solid {type_color};">
+    <div style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); 
+                padding: 1.5rem; border-radius: 15px; box-shadow: 0 8px 25px rgba(0,0,0,0.1); 
+                margin: 1rem 0; border-left: 5px solid {type_color};">
         <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
             <h4 style="margin: 0; color: #2c3e50;">{property_data['bhk_type']} in {property_data['location']}</h4>
             <span style="background: {type_color}; color: white; padding: 0.3rem 0.8rem; 
@@ -273,25 +237,23 @@ def display_property_card(property_data, key_suffix, show_save_button=True):
             </span>
         </div>
         
-        <div class="price" style="color: #27ae60; font-size: 1.4rem; font-weight: 700; margin-bottom: 1rem;">
+        <div style="color: #27ae60; font-size: 1.4rem; font-weight: 700; margin-bottom: 1rem;">
             ₹{property_data['price']:,}
             {' /month' if 'Rent' in property_data['property_type'] else ''}
         </div>
         
-        <div class="property-details">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem;">
-                <div><strong>📐 Area:</strong> {property_data['area']} sq.ft</div>
-                <div><strong>🏠 Furnished:</strong> {property_data['furnished_status']}</div>
-                <div><strong>📅 Age:</strong> {property_data['property_age']}</div>
-                <div><strong>🏢 Floor:</strong> {property_data.get('floor_number', 'N/A')}/{property_data.get('total_floors', 'N/A')}</div>
-            </div>
-            
-            <div style="margin-bottom: 1rem;">
-                <strong>📍 Address:</strong> {property_data.get('address', property_data['location'])}
-            </div>
-            
-            {f"<div style='margin-bottom: 1rem;'><strong>🎯 Amenities:</strong> {property_data.get('amenities', 'Basic amenities')}</div>" if property_data.get('amenities') else ""}
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem; color: #7f8c8d;">
+            <div><strong>📐 Area:</strong> {property_data['area']} sq.ft</div>
+            <div><strong>🏠 Furnished:</strong> {property_data['furnished_status']}</div>
+            <div><strong>📅 Age:</strong> {property_data['property_age']}</div>
+            <div><strong>🏢 Floor:</strong> {property_data.get('floor_number', 'N/A')}/{property_data.get('total_floors', 'N/A')}</div>
         </div>
+        
+        <div style="margin-bottom: 1rem;">
+            <strong>📍 Address:</strong> {property_data.get('address', property_data['location'])}
+        </div>
+        
+        {f"<div style='margin-bottom: 1rem;'><strong>🎯 Amenities:</strong> {property_data.get('amenities', 'Basic amenities')}</div>" if property_data.get('amenities') else ""}
     </div>
     """, unsafe_allow_html=True)
     
@@ -319,64 +281,9 @@ def display_property_card(property_data, key_suffix, show_save_button=True):
         if st.button("📋 Details", key=f"details_{key_suffix}", use_container_width=True):
             show_property_details(property_data)
 
-def display_table_view(results):
-    """Display properties in enhanced table format"""
-    # Prepare display dataframe
-    display_df = results.copy()
-    
-    # Format columns for better display
-    display_df['Price'] = display_df['price'].apply(lambda x: f"₹{x:,}")
-    display_df['Area'] = display_df['area'].apply(lambda x: f"{x} sq.ft")
-    display_df['Contact'] = display_df['contact_number'].apply(lambda x: f"{str(x)[:2]}XXXXXX{str(x)[-2:]}")
-    
-    # Select and rename columns
-    columns_to_show = [
-        'property_type', 'location', 'bhk_type', 'Price', 'Area', 
-        'furnished_status', 'property_age', 'Contact'
-    ]
-    
-    display_df = display_df[columns_to_show]
-    display_df.columns = [
-        'Type', 'Location', 'BHK/Office', 'Price', 'Area', 
-        'Furnished', 'Age', 'Contact'
-    ]
-    
-    st.dataframe(
-        display_df,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Type": st.column_config.TextColumn(width="medium"),
-            "Location": st.column_config.TextColumn(width="medium"),
-            "Price": st.column_config.TextColumn(width="small"),
-            "Contact": st.column_config.TextColumn(width="small")
-        }
-    )
-    
-    # Contact reveal functionality
-    st.markdown("### 📞 **Reveal Contact Numbers**")
-    
-    if len(results) > 0:
-        selected_index = st.selectbox(
-            "Select property to view contact:",
-            range(len(results)),
-            format_func=lambda x: f"{results.iloc[x]['bhk_type']} in {results.iloc[x]['location']} - ₹{results.iloc[x]['price']:,}",
-            key="table_contact_select"
-        )
-        
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            if st.button("📱 **Reveal Contact**", type="primary"):
-                selected_property = results.iloc[selected_index]
-                log_contact_view(st.session_state.user_email, selected_property['property_id'])
-                
-                with col2:
-                    st.success(f"📞 **Contact:** {selected_property['contact_number']}")
-                    st.balloons()
-
 def show_property_details(property_data):
-    """Show detailed property information in a modal-like display"""
-    with st.expander(f"🏠 **Detailed Information - {property_data['bhk_type']} in {property_data['location']}**", expanded=True):
+    """Show detailed property information"""
+    with st.expander(f"🏠 **Details - {property_data['bhk_type']} in {property_data['location']}**", expanded=True):
         
         col1, col2 = st.columns(2)
         
@@ -405,12 +312,3 @@ def show_property_details(property_data):
         if property_data.get('description'):
             st.markdown("#### 📝 **Description**")
             st.write(property_data['description'])
-        
-        # Additional costs for rentals
-        if 'Rent' in property_data['property_type']:
-            if property_data.get('maintenance_cost') or property_data.get('security_deposit'):
-                st.markdown("#### 💰 **Additional Costs**")
-                if property_data.get('maintenance_cost'):
-                    st.write(f"**Maintenance:** ₹{property_data['maintenance_cost']:,}/month")
-                if property_data.get('security_deposit'):
-                    st.write(f"**Security Deposit:** ₹{property_data['security_deposit']:,}")
