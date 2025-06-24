@@ -28,9 +28,12 @@ def check_plan_validity(email):
     
     # Check plan expiry
     if user['plan_end_date']:
-        end_date = datetime.strptime(user['plan_end_date'], '%Y-%m-%d')
-        if datetime.now() > end_date:
-            return False
+        try:
+            end_date = datetime.strptime(user['plan_end_date'], '%Y-%m-%d')
+            if datetime.now() > end_date:
+                return False
+        except:
+            return True  # If date parsing fails, allow access
     
     return True
 
@@ -50,12 +53,7 @@ def handle_authentication():
     col1, col2 = st.columns([1, 1], gap="large")
     
     with col1:
-        st.markdown("""
-        <div style="background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 15px; 
-                    border: 1px solid rgba(255,255,255,0.1);">
-            <h3 style="color: #3498db; margin-top: 0;">👤 Select Your Role</h3>
-        """, unsafe_allow_html=True)
-        
+        st.markdown("### 👤 Select Your Role")
         user_type = st.selectbox(
             "Login Type:",
             ["Customer Login", "Data Entry Operator", "Master Admin"],
@@ -70,7 +68,7 @@ def handle_authentication():
         }
         selected_role = role_mapping[user_type]
         
-        st.markdown("<h4 style='color: #3498db;'>📧 Email Address</h4>", unsafe_allow_html=True)
+        st.markdown("### 📧 Email Address")
         email = st.text_input(
             "Enter your registered email:",
             placeholder="your.email@example.com",
@@ -93,15 +91,9 @@ def handle_authentication():
                     st.error(f"❌ Invalid credentials or account not found for {selected_role}")
             else:
                 st.warning("⚠️ Please enter your email address")
-        
-        st.markdown("</div>", unsafe_allow_html=True)
     
     with col2:
-        st.markdown("""
-        <div style="background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 15px; 
-                    border: 1px solid rgba(255,255,255,0.1);">
-            <h3 style="color: #3498db; margin-top: 0;">🔒 OTP Verification</h3>
-        """, unsafe_allow_html=True)
+        st.markdown("### 🔒 OTP Verification")
         
         if 'current_otp' in st.session_state:
             st.success("✅ OTP sent successfully!")
@@ -145,8 +137,6 @@ def handle_authentication():
                     st.warning("⚠️ Please enter the OTP")
         else:
             st.info("📬 Please request OTP first by entering your email")
-        
-        st.markdown("</div>", unsafe_allow_html=True)
     
     # Test accounts section
     display_test_accounts()
