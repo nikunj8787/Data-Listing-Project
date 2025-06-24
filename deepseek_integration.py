@@ -82,14 +82,16 @@ def interpret_query_with_ai(query):
         
         if response.status_code == 200:
             result = response.json()
-            ai_response = result['choices'][0]['message']['content']
+            ai_response = result['choices']['message']['content']
             
             # Try to parse JSON response
             try:
                 # Clean the response to extract JSON
                 ai_response = ai_response.strip()
-                if ai_response.startswith('```
+                if ai_response.startswith('```json'):
                     ai_response = ai_response[7:]
+                elif ai_response.startswith('```
+                    ai_response = ai_response[3:]
                 if ai_response.endswith('```'):
                     ai_response = ai_response[:-3]
                 ai_response = ai_response.strip()
